@@ -34,3 +34,4 @@ override.tf.json
 
 # Ignore encrypted secrets
 env.txt
+hendertech-RootCert.crt

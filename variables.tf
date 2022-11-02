@@ -17,3 +17,11 @@ variable "dnsName" {
   type    = string
   default = "your.domain"
 }
+
+variable "vpnInstanceCount" {
+  default = 1
+}
+
+variable "aksInstanceCount" {
+  default = 1
+}

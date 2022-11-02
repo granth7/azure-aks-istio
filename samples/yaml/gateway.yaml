@@ -20,5 +20,6 @@ spec:
     tls:
       credentialName: letsencrypt-production-hendertech-tls
       mode: SIMPLE
+      httpsRedirect: true
     hosts:
     - "hender.tech"

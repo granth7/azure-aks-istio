@@ -1,0 +1,8 @@
+app-variables.tf
+generate-certificate.ps1
+keyvault-main.tf
+keyvault-secret.tf
+keyvault-variables.tf
+network-gateway.tf
+provider-main.tf
+terraform.tfvars

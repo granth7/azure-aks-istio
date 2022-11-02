@@ -3,18 +3,31 @@ resource "azurerm_resource_group" "rg" {
   location = "centralus"
 }
 
-resource "azurerm_virtual_network" "vnet" {
-  name                = "aks-vnet"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  address_space       = ["192.168.0.0/16"]
+# Create the VNET
+resource "azurerm_virtual_network" "hendertech-vnet" {
+  name                = "${var.region}-${var.environment}-${var.app_name}-vnet"
+  address_space       = ["10.10.0.0/16"]
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
+  tags = {
+    environment = var.environment
+  }
 }
 
-resource "azurerm_subnet" "subnet" {
+# Create a Gateway Subnet
+resource "azurerm_subnet" "hendertech-gateway-subnet" {
+  count                = var.vpnInstanceCount
+  name                 = "GatewaySubnet" # do not rename
+  address_prefixes     = ["10.10.0.0/24"]
+  virtual_network_name = azurerm_virtual_network.hendertech-vnet.name
+  resource_group_name  = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_subnet" "aks-subnet" {
   name                 = "aks-subnet"
   resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["192.168.1.0/24"]
+  virtual_network_name = azurerm_virtual_network.hendertech-vnet.name
+  address_prefixes     = ["10.10.16.0/20"]
   service_endpoints    = ["Microsoft.ContainerRegistry"]
 }
 
@@ -24,13 +37,14 @@ resource "azuread_group" "aks-admin-group" {
 }
 
 resource "azurerm_kubernetes_cluster" "aks" {
+  count                = var.aksInstanceCount
   name                = "aks"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   dns_prefix          = "hendertech-aks"
   default_node_pool {
     name                  = "default"
-    vnet_subnet_id        = azurerm_subnet.subnet.id
+    vnet_subnet_id        = azurerm_subnet.aks-subnet.id
     type                  = "VirtualMachineScaleSets"
     enable_auto_scaling   = true
     enable_node_public_ip = false
@@ -57,6 +71,26 @@ resource "azurerm_kubernetes_cluster" "aks" {
   http_application_routing_enabled = true
 }
 
+################### Deploy Microsoft Container Registry  #######################################
+
+resource "azurerm_container_registry" "hendertech-registry" {
+  count               = var.aksInstanceCount
+  name                = "hendertechRegistry"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  sku                 = "Basic"
+  admin_enabled       = true
+}
+
+resource "azurerm_role_assignment" "hendertech-registry" {
+  count                            = var.aksInstanceCount
+  principal_id                     = azurerm_kubernetes_cluster.aks[0].kubelet_identity[0].object_id
+  # OR principal_id                = data.azurerm_client_config.current.object_id
+  role_definition_name             = "AcrPull"
+  scope                            = azurerm_container_registry.hendertech-registry[0].id
+  skip_service_principal_aad_check = true
+}
+
 ###################Install Istio (Service Mesh) #######################################
 resource "random_password" "password" {
   length           = 16
@@ -68,25 +102,28 @@ data "azurerm_subscription" "current" {
 }
 
 resource "local_file" "kube_config" {
-  content    = azurerm_kubernetes_cluster.aks.kube_admin_config_raw
+  count                = var.aksInstanceCount
+  content    = azurerm_kubernetes_cluster.aks[0].kube_admin_config_raw
   filename   = "C:/Users/Grant/source/repos/azure-aks-istio/kube-cluster/config"   
 }
 
 
 resource "null_resource" "set-kube-config" {
+  count                = var.aksInstanceCount
   triggers = {
     always_run = "${timestamp()}"
   }
 
   provisioner "local-exec" {
     working_dir = "${path.module}"
-    command = "az aks get-credentials -n ${azurerm_kubernetes_cluster.aks.name} -g ${azurerm_resource_group.rg.name} --file kube-cluster/${azurerm_kubernetes_cluster.aks.name} --admin --overwrite-existing"
+    command = "az aks get-credentials -n ${azurerm_kubernetes_cluster.aks[0].name} -g ${azurerm_resource_group.rg.name} --file kube-cluster/${azurerm_kubernetes_cluster.aks[0].name} --admin --overwrite-existing"
   }
   depends_on = [local_file.kube_config]
 }
 
 
 resource "kubernetes_namespace" "istio_system" {
+  count                = var.aksInstanceCount
   provider = kubernetes
   metadata {
     name = "istio-system"
@@ -94,6 +131,7 @@ resource "kubernetes_namespace" "istio_system" {
 }
 
 resource "kubernetes_secret" "grafana" {
+  count                = var.aksInstanceCount
   provider = kubernetes
   metadata {
     name      = "grafana"
@@ -111,6 +149,7 @@ resource "kubernetes_secret" "grafana" {
 }
 
 resource "kubernetes_secret" "kiali" {
+  count                = var.aksInstanceCount
   provider = kubernetes
   metadata {
     name      = "kiali"
@@ -128,6 +167,7 @@ resource "kubernetes_secret" "kiali" {
 }
 
 resource "local_file" "istio-config" {
+  count                = var.aksInstanceCount
   content = templatefile("${path.module}/istio-aks.tmpl", {
     enableGrafana = true
     enableKiali   = true
@@ -137,18 +177,19 @@ resource "local_file" "istio-config" {
 }
 
 resource "null_resource" "istio" {
+  count                = var.aksInstanceCount
   triggers = {
     always_run = "${timestamp()}"
   }
   provisioner "local-exec" {
-    command = "istioctl manifest apply -f .istio/istio-aks.yaml --skip-confirmation --kubeconfig kube-cluster/${azurerm_kubernetes_cluster.aks.name}"
+    command = "istioctl manifest apply -f .istio/istio-aks.yaml --skip-confirmation --kubeconfig kube-cluster/${azurerm_kubernetes_cluster.aks[0].name}"
     working_dir = "${path.module}"
   }
   depends_on = [kubernetes_secret.grafana, kubernetes_secret.kiali, local_file.istio-config]
 }
 
 resource "helm_release" "my-kubernetes-dashboard" {
-
+  count                = var.vpnInstanceCount
   name = "my-kubernetes-dashboard"
 
   repository = "https://kubernetes.github.io/dashboard/"
@@ -182,6 +223,7 @@ resource "helm_release" "my-kubernetes-dashboard" {
 }
 
 module "cert_manager" {
+  count                = var.vpnInstanceCount
   create_namespace   = false
   namespace_name     = var.namespace
   source        = "terraform-iaac/cert-manager/kubernetes"
@@ -222,10 +264,11 @@ module "cert_manager" {
 
 // kubectl provider can be installed from here - https://gavinbunney.github.io/terraform-provider-kubectl/docs/provider.html 
 data "kubectl_filename_list" "manifests" {
+    count = var.aksInstanceCount
     pattern = "samples/yaml/*.yaml"
 }
 
 resource "kubectl_manifest" "yaml" {
-    count = length(data.kubectl_filename_list.manifests.matches)
-    yaml_body = file(element(data.kubectl_filename_list.manifests.matches, count.index))
+    count = var.aksInstanceCount > 0 ? length(data.kubectl_filename_list.manifests[0].matches) : 0
+    yaml_body = var.aksInstanceCount > 0 ? file(element(data.kubectl_filename_list.manifests[0].matches, count.index)) : ""
 }

@@ -60,6 +60,21 @@ kubectl create secret generic -n istio-system cloudflare-api-key-secret --from-l
 
 19. If you change anything with cert manager, make sure to delete certificates AND the clusterIssuer to remove all resources before re-running terraform apply.
 
+21. Navigate to http://hender.tech. If the page does not load then check to make sure all the deployments were actually deployed, make sure the pods are running, etc
+
+
+22. Push images to the registry
+```
+docker login leenetregistry.azurecr.io  # You can get the login URI and credentials from Access keys blade in the azure portal
+docker pull registry.k8s.io/e2e-test-images/jessie-dnsutils:1.3
+docker tag registry.k8s.io/e2e-test-images/jessie-dnsutils:1.3 leenetregistry.azurecr.io/jessie-dnsutils:1.3
+docker push leenetregistry.azurecr.io/jessie-dnsutils:1.3
+```
+23. Create the image pull secrets. For the `docker-password`, use the same credentials you used for docker login
+```
+kubectl create secret docker-registry leenet-registry --namespace default --docker-server=leenetregistry.azurecr.io --docker-username=leenetRegistry --docker-password=<service-principal-password>
+```
+
 # azure-aks-istio
 
 https://github.com/hashicorp/terraform-provider-kubernetes/blob/main/_examples/aks/
@@ -76,5 +91,34 @@ Then run
 terraform init
 terrraform plan
 
+# Deploying an Azure Point to Site VPN Gateway using Terraform
+From https://github.com/guillermo-musumeci/azure-terraform-point-to-site-vpn-gateway
+
 # To destroy, run:
 terraform destroy
+
+# Troubleshooting
+If you run into an error while creating the ACR role assignment like below:
+```
+ Error: authorization.RoleAssignmentsClient#Create: Failure responding to request: StatusCode=403 -- Original Error: autorest/azure: Service returned an error. Status=403 Code="AuthorizationFailed" Message="The client '6a3b5a66-834a-4d27-afa1-9a69ac988626' with object id '6a3b5a66-834a-4d27-afa1-9a69ac988626' does not have authorization to perform action 'Microsoft.Authorization/roleAssignments/write' over scope '/subscriptions/c034446e-d5dc-4fb0-b1fd-a8404b71f6b8/resourceGroups/aks-resource-group/providers/Microsoft.ContainerRegistry/registries/hendertechRegistry/providers/Microsoft.Authorization/roleAssignments/f0a5b065-1f5b-09c9-1b97-6fde9cd373be' or the scope is invalid. If access was recently granted, please refresh your credentials."
+│
+│   with azurerm_role_assignment.hendertech-registry[0],
+│   on main.tf line 267, in resource "azurerm_role_assignment" "hendertech-registry":
+│  267: resource "azurerm_role_assignment" "hendertech-registry" {
+```
+
+Run the following command, and then `terraform apply`:
+```
+az aks update \
+        --name my-aks-name \
+        --resource-group my-rg-name \
+        --attach-acr my-acr-name
+```
+For example as a one-liner:
+```
+az aks update --name aks --resource-group aks-resource-group --attach-acr hendertechRegistry
+```
+
+If the above doesn't work, consult this issue for more troubleshooting steps: 
+
+https://github.com/hashicorp/terraform-provider-azurerm/issues/11434
