@@ -80,15 +80,32 @@ resource "azurerm_container_registry" "hendertech-registry" {
   location            = azurerm_resource_group.rg.location
   sku                 = "Basic"
   admin_enabled       = true
+  depends_on = [azurerm_kubernetes_cluster.aks]
 }
 
-resource "azurerm_role_assignment" "hendertech-registry" {
+# This resource is created by the cluster, but not exposed by terraform directly
+data "azurerm_user_assigned_identity" "agentpool_identity" {
+  name                = "${azurerm_kubernetes_cluster.aks[0].name}-agentpool"
+  resource_group_name = azurerm_kubernetes_cluster.aks[0].node_resource_group
+  depends_on          = [azurerm_kubernetes_cluster.aks]
+}
+
+resource "azurerm_role_assignment" "acrpull" {
   count                            = var.aksInstanceCount
-  principal_id                     = azurerm_kubernetes_cluster.aks[0].kubelet_identity[0].object_id
-  # OR principal_id                = data.azurerm_client_config.current.object_id
+  principal_id                    = azurerm_kubernetes_cluster.aks[0].kubelet_identity[0].object_id
+  #principal_id                     = data.azurerm_client_config.current.object_id
+  #principal_id                    = data.azurerm_user_assigned_identity.agentpool_identity.principal_id
   role_definition_name             = "AcrPull"
   scope                            = azurerm_container_registry.hendertech-registry[0].id
   skip_service_principal_aad_check = true
+  depends_on                       = [
+    azurerm_container_registry.hendertech-registry,
+  ]
+}
+
+resource "time_sleep" "wait_acr" {
+  create_duration = "30s"
+  depends_on = [azurerm_role_assignment.acrpull]
 }
 
 ###################Install Istio (Service Mesh) #######################################
@@ -231,7 +248,7 @@ module "cert_manager" {
   cluster_issuer_email                   = var.email
   cluster_issuer_name                    = "cert-manager-global"
   cluster_issuer_private_key_secret_name = "cert-manager-private-key"
-
+  depends_on = [null_resource.istio]
 
   solvers = [
   {
@@ -271,4 +288,5 @@ data "kubectl_filename_list" "manifests" {
 resource "kubectl_manifest" "yaml" {
     count = var.aksInstanceCount > 0 ? length(data.kubectl_filename_list.manifests[0].matches) : 0
     yaml_body = var.aksInstanceCount > 0 ? file(element(data.kubectl_filename_list.manifests[0].matches, count.index)) : ""
+    depends_on = [azurerm_role_assignment.acrpull]
 }

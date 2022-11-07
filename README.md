@@ -43,34 +43,59 @@ set ARM_CLIENT_SECRET=<insert the password from above>
 terraform plan
 terraform apply
 ```
-13. You may have to run `terraform apply` twice
-14. Install Lens (https://k8slens.dev/)
-15. In Lens, File => Add Cluster, and paste in the `kubeconfig` file that was generated when you ran terraform apply
-16. In Lens: get the external ip via `kubectl get svc istio-ingressgateway -n istio-system`
+13. Go into azure and create a custom role via Access your subscription, IAM, Add, Custom Role, paste in the json in the json tab
+```
+{
+    "properties": {
+        "roleName": "role_assignment_write_delete",
+        "description": "Allow role to write and delete roles in this subscription",
+        "assignableScopes": [
+            "/subscriptions/<your-subscription-id>"
+        ],
+        "permissions": [
+            {
+                "actions": [
+                    "Microsoft.Authorization/roleAssignments/write",
+                    "Microsoft.Authorization/roleAssignments/delete"
+                ],
+                "notActions": [],
+                "dataActions": [],
+                "notDataActions": []
+            }
+        ]
+    }
+}
+```
+14. Add, Role Assignment, choose role role_assignment_write_delete, add members, search fore azure-cli, add the assignment
+15. You may have to run `terraform apply` twice
+16. Install Lens (https://k8slens.dev/)
+17. In Lens, File => Add Cluster, and paste in the `kubeconfig` file that was generated when you ran terraform apply
+18. In Lens: get the external ip via `kubectl get svc istio-ingressgateway -n istio-system`
 ```
 NAME                   TYPE           CLUSTER-IP   EXTERNAL-IP    PORT(S)                                      AGE
 istio-ingressgateway   LoadBalancer   10.0.21.44   20.252.13.28   15021:32186/TCP,80:31502/TCP,443:30900/TCP   26m
 ```
-17. Setup your hosts file to point a dns name to the external ip listed in the prior step, e.g. `20.252.13.28	hender.tech`
+19. Setup your hosts file to point a dns name to the external ip listed in the prior step, e.g. `20.252.13.28	hender.tech`
 
-18. To apply secrets manually for cert-manager, run
+20. To apply secrets manually for cert-manager, run
 ```
 kubectl create secret generic -n istio-system cloudflare-api-key-secret --from-literal=API="<YOUR_API_KEY>"
 ```
 
-19. If you change anything with cert manager, make sure to delete certificates AND the clusterIssuer to remove all resources before re-running terraform apply.
-
-21. Navigate to http://hender.tech. If the page does not load then check to make sure all the deployments were actually deployed, make sure the pods are running, etc
+21. If you change anything with cert manager, make sure to delete certificates AND the clusterIssuer to remove all resources before re-running terraform apply.
 
 
-22. Push images to the registry
+22. Navigate to http://hender.tech. If the page does not load then check to make sure all the deployments were actually deployed, make sure the pods are running, etc
+
+
+23. Push images to the registry
 ```
-docker login leenetregistry.azurecr.io  # You can get the login URI and credentials from Access keys blade in the azure portal
+docker login hendertechregistry.azurecr.io  # You can get the login URI and credentials from Access keys blade in the azure portal
 docker pull registry.k8s.io/e2e-test-images/jessie-dnsutils:1.3
-docker tag registry.k8s.io/e2e-test-images/jessie-dnsutils:1.3 leenetregistry.azurecr.io/jessie-dnsutils:1.3
-docker push leenetregistry.azurecr.io/jessie-dnsutils:1.3
+docker tag registry.k8s.io/e2e-test-images/jessie-dnsutils:1.3 hendertechregistry.azurecr.io/jessie-dnsutils:1.3
+docker push hendertechregistry.azurecr.io/jessie-dnsutils:1.3
 ```
-23. Create the image pull secrets. For the `docker-password`, use the same credentials you used for docker login
+24. Create the image pull secrets. For the `docker-password`, use the same credentials you used for docker login
 ```
 kubectl create secret docker-registry leenet-registry --namespace default --docker-server=leenetregistry.azurecr.io --docker-username=leenetRegistry --docker-password=<service-principal-password>
 ```
