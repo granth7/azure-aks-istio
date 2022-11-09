@@ -1,0 +1,601 @@
+# Default values for couchbase-operator chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Select what to install
+install:
+  # -- Install the couchbase operator
+  couchbaseOperator: true
+  # -- Install the admission controller
+  admissionController: true
+  # -- Install couchbase cluster
+  couchbaseCluster: true
+  # -- Install sync gateway
+  syncGateway: false
+
+# couchbaseOperator is the controller for couchbase cluster
+couchbaseOperator:
+  # -- Name of the couchbase operator Deployment
+  name: "couchbase-operator"
+  # -- Image specifies repository and tag of the Couchbase Operator container.
+  image:
+    repository: couchbase/operator
+    tag: 2.3.0
+  # -- The policy for pulling images from the repository onto hosts.
+  # The imagePullPolicy value defaults to IfNotPresent, which means
+  # that images are only pulled if they’re not present on the Kubernetes node.
+  # Values allowed are Always, IfNotPresent, and Never.
+  imagePullPolicy: IfNotPresent
+  # -- ImagePullSecrets is an optional list of references to secrets to use for pulling images.
+  imagePullSecrets: []
+  # -- Set of command-line flags to pass on to the Operator to modify its behavior.
+  # see: https://docs.couchbase.com/operator/2.0/reference-operator-configuration.html#command-line-arguments
+  commandArgs:
+    # -- Pod creation timeout. The Operator allows the timeout of pod creation to be manually configured.
+    # It is primarily intended for use on cloud platforms where the deployment of multiple volumes and
+    # pulling of a Couchbase Server container image may take a longer time than the default timeout period.
+    pod-create-timeout: 10m
+  # -- Resource Limits and requests for Pod CPU and Memory
+  resources: {}
+  # -- Specify a node selection constraint for couchbase-admission-operator pod assignment.
+  # -- Ref: https://kubernetes.io/docs/user-guide/node-selection/
+  nodeSelector: {}
+  # -- Tolerations are applied to pods, and allow (but do not require)
+  # the pods to schedule onto nodes with matching taints.
+  tolerations: []
+  # -- RBAC Scope of the Operator. Must be either 'Role' or 'ClusterRole'
+  scope: Role
+
+# admissionController is the controller for couchbase admission controller
+# name is derived from chart
+admissionController:
+  name: "couchbase-admission-controller"
+  # -- Image specifies repository and tag of the Couchbase Admission container.
+  image:
+    repository: couchbase/admission-controller
+    tag: 2.3.0
+  # -- The policy for pulling images from the repository onto hosts.
+  # The imagePullPolicy value defaults to IfNotPresent, which means
+  # that images are only pulled if they’re not present on the Kubernetes node.
+  # Values allowed are Always, IfNotPresent, and Never.
+  imagePullPolicy: IfNotPresent
+  # -- ImagePullSecrets is an optional list of references to secrets to use for pulling images
+  imagePullSecrets: []
+  # -- Set of command-line flags to pass on to the Admission Controller to modify its behavior.
+  # Do not change.
+  commandArgs:
+    validate-secrets: true
+    validate-storage-classes: true
+    default-file-system-group: true
+  # -- Resource Limits and requests for Pod CPU and Memory
+  resources: {}
+  # -- Specify a node selection constraint for couchbase-admission-controller pod assignment.
+  # Ref: https://kubernetes.io/docs/user-guide/node-selection/
+  nodeSelector: {}
+  # -- Tolerations are applied to pods, and allow (but do not require)
+  # the pods to schedule onto nodes with matching taints.
+  tolerations: []
+  # -- Determines whether the admission controller should log all of its validation notices within the console.
+  # When set to false, only validation errors are logged within the pod’s console.
+  verboseLogging: false
+  # -- Specify whether to run as a non-root user. Running as non-root ensures least privilege.
+  runAsNonRoot: true
+  # -- Disable the creation of Validation webhook. Setting to 'false' may be helpful when
+  # installing into a restricted environments (ie Strict mTLS), since disabling
+  # avoids performing resource fetching and validation from the Kubernetes API server.
+  disableValidatingWebhook: false
+  # -- RBAC Scope of the Admission Controller. Must be either 'Role' or 'ClusterRole'.
+  # When scope is 'ClusterRole' the admission controller is able to validate resources
+  # in all namespaces.  'Role' scope limits validation to a single a namespace.
+  scope: ClusterRole
+
+# admissionService exposes validation to cluster. This service
+# is over https and certs are auto-generated based on `admissionService.name`.
+admissionService:
+  # -- Name of the service (auto-generated)
+  name:
+  # -- Port service exposes
+  port: 443
+  targetPort: 8443
+
+# admissionCA can be used to override the Certs that will be used
+# to sign the keys used by the admission operator.
+admissionCA:
+  # -- A base64 encoded PEM format certificate
+  cert:
+  # -- A base64 encoded PEM format private key
+  key:
+  # -- Expiry time of CA in days for generated certs
+  expiration: 365
+
+# secret with client certs mounted within the admission controller.
+admissionSecret:
+  # -- Name of the secret (auto-generated)
+  name:
+  # -- PEM format certificate (auto-generated)
+  # override via --set-file
+  cert:
+  # -- PEM format certificate (auto-generated)
+  # override via --set-file
+  key:
+
+# -- Coredns service configuration to be applied to
+# pods for cross-cluster deployments
+coredns:
+  # -- Name of Kubernetes service which exposes DNS endpoints
+  service:
+  # -- Search list for host-name lookup
+  searches:
+  - default.svc.cluster.local
+  - svc.cluster.local
+  - cluster.local
+
+# -- CouchbaseBackups runs a job which preserves data into backups
+backups: {}
+#
+# Uncomment to create a backup named 'my-backup'
+#
+#   default-backup:
+#     name: my-backup
+#     strategy: full_incremental
+#     full:
+#       schedule: "0 3 * * 0"
+#     incremental:
+#       schedule: "0 3 * * 1-6"
+#     successfulJobsHistoryLimit: 1
+#     failedJobsHistoryLimit: 3
+#     backoffLimit: 2
+#     backupRetention: 24h
+#     logRetention: 24h
+#     size: 5Gi
+
+# CouchbaseBackupRestore restores data from backups
+backuprestores: {}
+#
+# Uncomment to create a restore named 'my-restore'
+#
+#   default-restore:
+#     name: my-restore
+#     backup: my-backup
+#     repo: cb-example-2020-11-12T19_00_03
+#     start:
+#     # Pick either int or str
+#       # int: 1
+#       str: oldest
+#     end:
+#       # int: 1
+#       str: latest
+#     backoffLimit: 2
+#     logRetention: 24h
+
+# Users to create for couchbase RBAC.
+# If 'autobind' is set, then Users are automatically created
+# alongside groups with specified roles.  To manually create
+# groups and bind users then set 'autobind' to 'false' and
+# specify 'groups' and 'rolebindings' resources
+users: {}
+#
+# Uncomment to create an example user named 'developer'
+#
+#   developer:
+#     # Automatically bind user to a Group resource.
+#     # See example below of 'developer' user.
+#     # When autobind is 'true' then the user is
+#     # created and automatically bound to a group named 'developer'.
+#     autobind: true
+#     # password to use for user authentication
+#     # (alternatively use authSecret)
+#     password: password
+#     # optional secret to use containing user password
+#     authSecret:
+#     # domain of user authentication
+#     authDomain: local
+#     # roles attributed to group
+#     roles:
+#       - name: bucket_admin
+#         bucket: default
+
+
+# --  Uncomment to create a "couchbasecollectiongroups" resource
+# Defines a group of collections. A collection is a data container, defined on Couchbase Server,
+# within a bucket whose type is either Couchbase or Ephemeral.
+# See https://docs.couchbase.com/operator/current/resource/couchbasecollectiongroup.html
+collectiongroups: {}
+# # -- Name of the CouchbaseCollectionGroup to create. @default -- will be
+# # filled in as below
+# default:
+#   # -- MaxTTL defines how long a document is permitted to exist for, without
+#   # modification, until it is automatically deleted.  This field takes
+#   # precedence over any TTL defined at the bucket level.  This is a default,
+#   # and maximum time-to-live and may be set to a lower value by the client.
+#   # If the client specifies a higher value, then it is truncated to the
+#   # maximum durability.  Documents are removed by Couchbase, after they have
+#   # expired, when either accessed, the expiry pager is run, or the bucket is
+#   # compacted.  When set to 0, then documents are not expired by default.
+#   # This field must be a duration in the range 0-2147483648s, defaulting to 0.
+#   # More info: https://golang.org/pkg/time/#ParseDuration
+#   maxTTL:
+#   # -- Names specifies the names of the collections.  Unlike
+#   # CouchbaseCollection, which specifies a single collection, a collection
+#   # group specifies multiple, and the collection group must specify at least
+#   # one collection name. Any collection names specified must be unique.
+#   # Collection names must be 1-251 characters in length, contain only
+#   # [a-zA-Z1-9_-%] and not start with either _ or %.
+#   names: []
+
+# --  Uncomment to create a "couchbasecollections" resource
+# A collection is a data container, defined on Couchbase Server, within a bucket whose type is either Couchbase or Ephemeral.
+# See https://docs.couchbase.com/operator/current/resource/couchbasecollection.html
+collections: {}
+# # -- Name of the CouchbaseCollection to create. @default -- will be filled in
+# # as below
+# default:
+#   # -- MaxTTL defines how long a document is permitted to exist for, without
+#   # modification, until it is automatically deleted.  This field takes
+#   # precedence over any TTL defined at the bucket level.  This is a default,
+#   # and maximum time-to-live and may be set to a lower value by the client.
+#   # If the client specifies a higher value, then it is truncated to the
+#   # maximum durability.  Documents are removed by Couchbase, after they have
+#   # expired, when either accessed, the expiry pager is run, or the bucket is
+#   # compacted.  When set to 0, then documents are not expired by default.
+#   # This field must be a duration in the range 0-2147483648s, defaulting to 0.
+#   # More info: https://golang.org/pkg/time/#ParseDuration
+#   maxTTL:
+#   # -- Name specifies the name of the collection.  By default, the
+#   # metadata.name is used to define the collection name, however, due to the
+#   # limited character set, this field can be used to override the default and
+#   # provide the full functionality. Additionally the `metadata.name` field is
+#   # a DNS label, and thus limited to 63 characters, this field must be used if
+#   # the name is longer than this limit. Collection names must be 1-251
+#   # characters in length, contain only [a-zA-Z0-9_-%] and not start with
+#   # either _ or %.
+#   name:
+
+# --  Uncomment to create a "couchbasescopegroups" resource
+# CouchbaseScopeGroup represents a logical unit of data storage that sits between buckets and collections e.g.
+# a bucket may contain multiple scopes, and a scope may contain multiple collections.
+#
+# See https://docs.couchbase.com/operator/current/resource/couchbasescopegroup.html
+scopegroups: {}
+# # -- Name of the CouchbaseScopeGroup to create. @default -- will be filled in
+# # as below
+# default:
+#   # -- Collections defines how to collate collections included in this scope
+#   # or scope group. Any of the provided methods may be used to collate a set
+#   # of collections to manage.  Collated collections must have unique names,
+#   # otherwise it is considered ambiguous, and an error condition.  Ref https:/
+#   # /docs.couchbase.com/operator/current/resource/couchbasescopegroup.html#cou
+#   # chbasescopegroups-spec-collections
+#   collections: []
+#   kind: CouchbaseScopeGroup
+#   # -- Names specifies the names of the scopes.  Unlike CouchbaseScope, which
+#   # specifies a single scope, a scope group specifies multiple, and the scope
+#   # group must specify at least one scope name. Any scope names specified must
+#   # be unique. Scope names must be 1-251 characters in length, contain only
+#   # [a-zA-Z0-9_-%] and not start with either _ or %.
+#   names: []
+
+# --  Uncomment to create a "couchbasescopes" resource
+#
+# A scope is simply a single-tier namespace for a group of collections to exist within.
+# Collections within a scope must all have unique names, but collections in different scopes may share the same name.
+# This property allows multi-tenancy.
+#
+# See https://docs.couchbase.com/operator/current/resource/couchbasescope.html
+scopes: {}
+# # -- Name of the CouchbaseScope to create. @default -- will be filled in as
+# # below
+# default:
+#   # -- Collections defines how to collate collections included in this scope
+#   # or scope group. Any of the provided methods may be used to collate a set
+#   # of collections to manage.  Collated collections must have unique names,
+#   # otherwise it is considered ambiguous, and an error condition.  Ref https:/
+#   # /docs.couchbase.com/operator/current/resource/couchbasescope.html#couchbas
+#   # escopes-spec-collections
+#   collections: []
+#   # -- DefaultScope indicates whether this resource represents the default
+#   # scope for a bucket.  When set to `true`, this allows the user to refer to
+#   # and manage collections within the default scope.  When not defined, the
+#   # Operator will implicitly manage the default scope as the default scope can
+#   # not be deleted from Couchbase Server.  The Operator defined default scope
+#   # will also have the `persistDefaultCollection` flag set to `true`.  Only
+#   # one default scope is permitted to be contained in a bucket.
+#   defaultScope: false
+#   kind: CouchbaseScope
+#   # -- Name specifies the name of the scope.  By default, the metadata.name is
+#   # used to define the scope name, however, due to the limited character set,
+#   # this field can be used to override the default and provide the full
+#   # functionality. Additionally the `metadata.name` field is a DNS label, and
+#   # thus limited to 63 characters, this field must be used if the name is
+#   # longer than this limit. Scope names must be 1-251 characters in length,
+#   # contain only [a-zA-Z0-9_-%] and not start with either _ or %.
+#   name:
+
+
+
+# --  Uncomment to create a "couchbasegroups" resource
+groups: {}
+#  default:
+#    # -- LDAPGroupRef is a reference to an LDAP group.
+#    ldapGroupRef:
+#    # -- Roles is a list of roles that this group is granted.
+#    roles:
+#      # -- Bucket name for bucket admin roles.  When not specified for a role
+#      # that can be scoped to a specific bucket, the role will apply to all
+#      # buckets in the cluster. Deprecated:  Couchbase Autonomous Operator 2.3
+#      bucket:
+#      # -- Bucket level access to apply to specified role. The bucket must
+#      # exist.  When not specified, the bucket field will be checked. If both
+#      # are empty and the role can be scoped to a specific bucket, the role will
+#      # apply to all buckets in the cluster
+#      buckets:
+#        # -- Resources is an explicit list of named bucket resources that will
+#        # be considered for inclusion in this role.  If a resource reference
+#        # doesn't match a resource, then no error conditions are raised due to
+#        # undefined resource creation ordering and eventual consistency.
+#        resources:
+#          # Kind indicates the kind of resource that is being referenced.  A
+#          # Role can only reference `CouchbaseBucket` kind.  This field defaults
+#          # to `CouchbaseBucket` if not specified.
+#          kind: CouchbaseBucket
+#          # Name is the name of the Kubernetes resource name that is being
+#          # referenced.
+#          name:
+#        # -- Selector allows resources to be implicitly considered for inclusion
+#        # in this role.  More info:
+#        # https://kubernetes.io/docs/reference/generated/kubernetes-
+#        # api/v1.21/#labelselector-v1-meta
+#        selector:
+#          # matchExpressions is a list of label selector requirements. The
+#          # requirements are ANDed.
+#          matchExpressions:
+#            # key is the label key that the selector applies to.
+#            key:
+#            # operator represents a key's relationship to a set of values. Valid
+#            # operators are In, NotIn, Exists and DoesNotExist.
+#            operator:
+#            # values is an array of string values. If the operator is In or
+#            # NotIn, the values array must be non-empty. If the operator is
+#            # Exists or DoesNotExist, the values array must be empty. This array
+#            # is replaced during a strategic merge patch.
+#            values:
+#          # matchLabels is a map of {key,value} pairs. A single {key,value} in
+#          # the matchLabels map is equivalent to an element of matchExpressions,
+#          # whose key field is "key", the operator is "In", and the values array
+#          # contains only "value". The requirements are ANDed.
+#          matchLabels:
+#      # -- Collection level access to apply to the specified role.  The
+#      # collection must exist. When not specified, the role is subject to scope
+#      # or bucket level access.
+#      collections:
+#        # -- Resources is an explicit list of named resources that will be
+#        # considered for inclusion in this collection or collections.  If a
+#        # resource reference doesn't match a resource, then no error conditions
+#        # are raised due to undefined resource creation ordering and eventual
+#        # consistency.
+#        resources:
+#          # Kind indicates the kind of resource that is being referenced.  A
+#          # scope can only reference `CouchbaseCollection` and
+#          # `CouchbaseCollectionGroup` resource kinds.  This field defaults to
+#          # `CouchbaseCollection` if not specified.
+#          kind: CouchbaseCollection
+#          # Name is the name of the Kubernetes resource name that is being
+#          # referenced. Legal collection names have a maximum length of 251
+#          # characters and may be composed of any character from "a-z", "A-Z",
+#          # "0-9" and "_-%".
+#          name:
+#        # -- Selector allows resources to be implicitly considered for inclusion
+#        # in this collection or collections.  More info:
+#        # https://kubernetes.io/docs/reference/generated/kubernetes-
+#        # api/v1.21/#labelselector-v1-meta
+#        selector:
+#          # matchExpressions is a list of label selector requirements. The
+#          # requirements are ANDed.
+#          matchExpressions:
+#            # key is the label key that the selector applies to.
+#            key:
+#            # operator represents a key's relationship to a set of values. Valid
+#            # operators are In, NotIn, Exists and DoesNotExist.
+#            operator:
+#            # values is an array of string values. If the operator is In or
+#            # NotIn, the values array must be non-empty. If the operator is
+#            # Exists or DoesNotExist, the values array must be empty. This array
+#            # is replaced during a strategic merge patch.
+#            values:
+#          # matchLabels is a map of {key,value} pairs. A single {key,value} in
+#          # the matchLabels map is equivalent to an element of matchExpressions,
+#          # whose key field is "key", the operator is "In", and the values array
+#          # contains only "value". The requirements are ANDed.
+#          matchLabels:
+#      # -- Name of role.
+#      name:
+#      # -- Scope level access to apply to specified role.  The scope must exist.
+#      # When not specified, the role will apply to selected bucket or all
+#      # buckets in the cluster.
+#      scopes:
+#        # -- Resources is an explicit list of named resources that will be
+#        # considered for inclusion in this scope or scopes.  If a resource
+#        # reference doesn't match a resource, then no error conditions are
+#        # raised due to undefined resource creation ordering and eventual
+#        # consistency.
+#        resources:
+#          # Kind indicates the kind of resource that is being referenced.  A
+#          # scope can only reference `CouchbaseScope` and `CouchbaseScopeGroup`
+#          # resource kinds.  This field defaults to `CouchbaseScope` if not
+#          # specified.
+#          kind: CouchbaseScope
+#          # Name is the name of the Kubernetes resource name that is being
+#          # referenced. Legal scope names have a maximum length of 251
+#          # characters and may be composed of any character from "a-z", "A-Z",
+#          # "0-9" and "_-%".
+#          name:
+#        # -- Selector allows resources to be implicitly considered for inclusion
+#        # in this scope or scopes.  More info:
+#        # https://kubernetes.io/docs/reference/generated/kubernetes-
+#        # api/v1.21/#labelselector-v1-meta
+#        selector:
+#          # matchExpressions is a list of label selector requirements. The
+#          # requirements are ANDed.
+#          matchExpressions:
+#            # key is the label key that the selector applies to.
+#            key:
+#            # operator represents a key's relationship to a set of values. Valid
+#            # operators are In, NotIn, Exists and DoesNotExist.
+#            operator:
+#            # values is an array of string values. If the operator is In or
+#            # NotIn, the values array must be non-empty. If the operator is
+#            # Exists or DoesNotExist, the values array must be empty. This array
+#            # is replaced during a strategic merge patch.
+#            values:
+#          # matchLabels is a map of {key,value} pairs. A single {key,value} in
+#          # the matchLabels map is equivalent to an element of matchExpressions,
+#          # whose key field is "key", the operator is "In", and the values array
+#          # contains only "value". The requirements are ANDed.
+#          matchLabels:
+
+# --  Uncomment to create a "couchbaserolebindings" resource
+rolebindings: {}
+# default:
+#   kind: CouchbaseRoleBinding
+#   # -- CouchbaseGroup being bound to subjects.
+#   roleRef:
+#     # -- Kind of role to use for binding.
+#     kind:
+#     # -- Name of role resource to use for binding.
+#     name:
+#   # -- List of users to bind a role to.
+#   subjects:
+#     # -- Couchbase user/group kind.
+#     kind:
+#     # -- Name of Couchbase user resource.
+#     name:
+
+# TLS Certs that will be used to encrypt traffic between operator and couchbase
+tls:
+  # -- Enable to auto create certs
+  generate: false
+  # -- Legacy TLS configuration with static format which requires PKCS#1 formatted keys.
+  # Legacy format is used implicitly during upgrade when old static keys exist.
+  # The default is 'false' which supports additional formats and multiple root CAs.
+  legacy: false
+  # -- Expiry time of CA in days for generated certs
+  expiration: 365
+  # -- This field defines whether node-to-node encryption is enabled.
+  # Must be either 'All' or 'ControlPlaneOnly'.
+  # If not specified, data between Couchbase Server nodes is not encrypted.
+  nodeToNodeEncryption:
+
+# syncGateway configuration
+syncGateway:
+  # -- Kind of resource to use when installing sync gateway resource.
+  # suppports (Deployment | Statefulset)
+  kind: Deployment
+  # -- Name of the sync gateway pod.
+  # defaults to name of chart
+  name:
+  # -- How many sync gateway pods to create
+  # horizontally scale the deployment
+  replicas: 1
+  # -- Optional set to change cleanup policy
+  revisionHistoryLimit:
+  # -- Labels to apply to the deployment resource
+  labels: {}
+  # -- Labels to apply to the pods
+  podLabels: {}
+  # -- Resources to apply to the pods
+  resources: {}
+  # -- Affinity to apply to the pods
+  affinity: {}
+  # -- Which nodes to run the pods on
+  nodeSelector: {}
+  # -- Tolerations are applied to pods, and allow (but do not require)
+  # the pods to schedule onto nodes with matching taints.
+  tolerations: []
+  admin:
+    # -- Defines if the admin API will be exposed by sync gateway
+    enabled: false
+  service:
+    # -- Additional annotations to add to the Sync Gateway service.
+    # Useful for setting cloud provider specific annotations controlling the services deployed.
+    annotations: {}
+    # -- Optionally configure traffic policy for LoadBalancer and NodePort
+    externalTrafficPolicy:
+  # defines integration with third party monitoring software
+  monitoring:
+    prometheus:
+      # -- Defines whether Prometheus metric collection is enabled
+      enabled: false
+      # -- Image used by the Sync Gateway to perform metric collection
+      # (injected as a "sidecar" in each Sync Gateway Pod)
+      image:
+        repository: couchbasesamples/sync-gateway-prometheus-exporter
+        tag: latest
+      # pod
+      resources: {}
+        # requests:
+        #   cpu: 100m
+        # limits:
+        #   cpu: 100m
+  # -- Database config
+  config:
+    logging:
+      console:
+        enabled: true
+        log_level: "debug"
+        log_keys:
+          - "*"
+    # -- Databases is a list containing
+    # bucket replication configs
+    databases:
+      db:
+        # -- Bucket replicated to sync gateway
+        bucket: default
+        # -- Guest user config
+        users:
+          GUEST:
+            # -- Disable creation of guest user
+            disabled: false
+            # -- Channels guest user may access.
+            # defaults to all channels
+            admin_channels: ["*"]
+        # -- Server to connect db to, defaults to cluster server
+        server:
+        # -- Username of db admin, defaults to cluster admin username
+        username:
+        # -- Password of db admin, defaults to cluster admin password
+        password:
+        allow_conflicts: false
+        revs_limit: 20
+        enable_shared_bucket_access: true
+        # -- Optional ca.cert for tls connection
+        # (auto-generated when tls.generate true)
+        cacert:
+  # -- Type of service to use for exposing Sync Gateway
+  # Set as empty string to prevent service creation
+  exposeServiceType: ClusterIP
+  # -- Image of the sync gateway container
+  image:
+    repository: couchbase/sync-gateway
+    tag: 3.0.0-enterprise
+  imagePullPolicy: IfNotPresent
+  # -- Optional secret to use with prepoulated database config
+  configSecret:
+  # -- Location within sync gateway to back with persistent volume
+  volumeMounts:
+  - name: data
+    mountPath: /dbs
+    readOnly: true
+  # -- Volume claim template to define size of persistent volumes
+  # to provide for stateful sets
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        storageClassName: default
+        resources:
+          requests:
+            storage: 1Gi
+
+

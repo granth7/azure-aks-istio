@@ -1,0 +1,68 @@
+apiVersion: couchbase.com/v2
+kind: CouchbaseCluster
+metadata:
+  name: my-couchbase
+spec:
+  image: couchbase/server:7.0.3
+  security:
+    adminSecret: my-couchbase-auth
+  networking:
+    exposeAdminConsole: true
+    adminConsoleServices:
+    - data
+  buckets:
+    managed: true
+  cluster:
+    analyticsServiceMemoryQuota: 1Gi
+    autoCompaction:
+      databaseFragmentationThreshold:
+        percent: 30
+      tombstonePurgeInterval: 72h0m0s
+      viewFragmentationThreshold:
+        percent: 30
+    #autoFailoverMaxCount: 3
+    autoFailoverOnDataDiskIssuesTimePeriod: 2m0s
+    autoFailoverTimeout: 2m0s
+    dataServiceMemoryQuota: 1024Mi
+    eventingServiceMemoryQuota: 256Mi
+    indexServiceMemoryQuota: 1024Mi
+    indexStorageSetting: plasma
+    searchServiceMemoryQuota: 1024Mi
+  servers:
+  - size: 1
+    name: all_services
+    services:
+    - data
+    - index
+    - query
+    - search
+    - eventing
+    - analytics
+    volumeMounts:
+      default: couchbase
+    pod:
+      spec:
+        #nodeSelector:
+        #  kubernetes.io/hostname: master-0
+  antiAffinity: false
+  backup:
+    image: couchbase/operator-backup:1.3.0 
+    managed: true 
+    serviceAccountName: couchbase-backup
+    #nodeSelector:
+    #  kubernetes.io/hostname: master-0
+  logging:
+    server:
+      enabled: true
+  volumeClaimTemplates: 
+  - metadata:
+      name: couchbase
+    spec:
+      storageClassName: default
+      resources: 
+        requests:
+          storage: 10Gi
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000

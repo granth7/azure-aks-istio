@@ -13,13 +13,16 @@ spec:
       protocol: HTTP
     hosts:
     - "hender.tech"
+    - "*.hender.tech"
+    tls:
+      httpsRedirect: true
   - port:
       number: 443
       name: https
       protocol: HTTPS
+    hosts:
+    - "hender.tech"
+    - "*.hender.tech"
     tls:
       credentialName: letsencrypt-production-hendertech-tls
       mode: SIMPLE
-      httpsRedirect: true
-    hosts:
-    - "hender.tech"

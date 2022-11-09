@@ -1,0 +1,3 @@
+install:
+  # -- Install couchbase cluster
+  couchbaseCluster: false

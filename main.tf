@@ -48,10 +48,14 @@ resource "azurerm_kubernetes_cluster" "aks" {
     type                  = "VirtualMachineScaleSets"
     enable_auto_scaling   = true
     enable_node_public_ip = false
-    max_count             = 3
+    max_count             = 1
     min_count             = 1
     os_disk_size_gb       = 256
     vm_size               = "Standard_D2_v2"
+    max_pods              = 250
+    node_labels = {
+      role = "master"
+    }
   }
   azure_active_directory_role_based_access_control {
     managed                = true
@@ -69,6 +73,32 @@ resource "azurerm_kubernetes_cluster" "aks" {
   
   azure_policy_enabled = true
   http_application_routing_enabled = true
+}
+
+resource "azurerm_kubernetes_cluster_node_pool" "worker" {
+  name                  = "worker"
+  kubernetes_cluster_id = azurerm_kubernetes_cluster.aks[0].id
+  vm_size               = "Standard_DS2_v2"
+  vnet_subnet_id        = azurerm_subnet.aks-subnet.id
+  max_count             = 1
+  min_count             = 1
+  enable_auto_scaling   = true
+  node_labels = {
+    role = "worker"
+  }
+}
+
+resource "azurerm_kubernetes_cluster_node_pool" "couchbase" {
+  name                  = "couchbase"
+  kubernetes_cluster_id = azurerm_kubernetes_cluster.aks[0].id
+  vm_size               = "Standard_DS2_v2"
+  vnet_subnet_id        = azurerm_subnet.aks-subnet.id
+  max_count             = 1
+  min_count             = 1
+  enable_auto_scaling   = true
+  node_labels = {
+    role = "couchbase"
+  }
 }
 
 ################### Deploy Microsoft Container Registry  #######################################
@@ -205,42 +235,8 @@ resource "null_resource" "istio" {
   depends_on = [kubernetes_secret.grafana, kubernetes_secret.kiali, local_file.istio-config]
 }
 
-resource "helm_release" "my-kubernetes-dashboard" {
-  count                = var.vpnInstanceCount
-  name = "my-kubernetes-dashboard"
-
-  repository = "https://kubernetes.github.io/dashboard/"
-  chart      = "kubernetes-dashboard"
-  namespace  = "default"
-
-  set {
-    name  = "service.externalPort"
-    value = 9090
-  }
-
-  set {
-    name  = "replicaCount"
-    value = 1
-  }
-
-  set {
-    name  = "rbac.clusterReadOnlyRole"
-    value = "true"
-  }
-
-  set {
-    name  = "extraArgs"
-    value = "{--enable-insecure-login=true,--insecure-bind-address=0.0.0.0,--insecure-port=9090}"
-  }
-
-  set {
-    name  = "protocolHttp"
-    value = true
-  }
-}
-
 module "cert_manager" {
-  count                = var.vpnInstanceCount
+  count                = var.aksInstanceCount
   create_namespace   = false
   namespace_name     = var.namespace
   source        = "terraform-iaac/cert-manager/kubernetes"
@@ -270,7 +266,7 @@ module "cert_manager" {
 ]
   certificates = {
   "letsencrypt-production-hendertech" = {
-    dns_names = [var.dnsName]
+    dns_names = [var.dnsName, "*.${var.dnsName}"]
     }
   }
 
@@ -282,7 +278,7 @@ module "cert_manager" {
 // kubectl provider can be installed from here - https://gavinbunney.github.io/terraform-provider-kubectl/docs/provider.html 
 data "kubectl_filename_list" "manifests" {
     count = var.aksInstanceCount
-    pattern = "samples/yaml/*.yaml"
+    pattern = "ingress/yaml/*.yaml"
 }
 
 resource "kubectl_manifest" "yaml" {

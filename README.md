@@ -37,8 +37,8 @@ set ARM_CLIENT_SECRET=<insert the password from above>
 ```
 9. Open your environment variables from the vault via `neon tool vault edit terraform_env.txt` and paste in the contents from Notepad into your terminal to set your environment variables.
 10. Follow these instructions: https://stackoverflow.com/questions/70851465/azure-ad-group-authorization-requestdenied-insufficient-privileges-to-complet
-11. Rename your .kube folder to .kube.current so that you will only see what is imported in lens (installed in step 14).
-12. Run the following from .\azure-aks-istio `terraform init` if you haven't ran init yet, then:
+11. Rename your .kube folder to .kube.current so that you will only see what is imported in lens (installed in step 16).
+12. Run `terraform init` from .\azure-aks-istio  if you haven't ran init yet, then:
 ```
 terraform plan
 terraform apply
@@ -97,7 +97,7 @@ docker push hendertechregistry.azurecr.io/jessie-dnsutils:1.3
 ```
 24. Create the image pull secrets. For the `docker-password`, use the same credentials you used for docker login
 ```
-kubectl create secret docker-registry leenet-registry --namespace default --docker-server=leenetregistry.azurecr.io --docker-username=leenetRegistry --docker-password=<service-principal-password>
+kubectl create secret docker-registry hendertech-registry --namespace default --docker-server=hendertechregistry.azurecr.io --docker-username=hendertechRegistry --docker-password=<service-principal-password>
 ```
 
 # azure-aks-istio
@@ -123,27 +123,4 @@ From https://github.com/guillermo-musumeci/azure-terraform-point-to-site-vpn-gat
 terraform destroy
 
 # Troubleshooting
-If you run into an error while creating the ACR role assignment like below:
-```
- Error: authorization.RoleAssignmentsClient#Create: Failure responding to request: StatusCode=403 -- Original Error: autorest/azure: Service returned an error. Status=403 Code="AuthorizationFailed" Message="The client '6a3b5a66-834a-4d27-afa1-9a69ac988626' with object id '6a3b5a66-834a-4d27-afa1-9a69ac988626' does not have authorization to perform action 'Microsoft.Authorization/roleAssignments/write' over scope '/subscriptions/c034446e-d5dc-4fb0-b1fd-a8404b71f6b8/resourceGroups/aks-resource-group/providers/Microsoft.ContainerRegistry/registries/hendertechRegistry/providers/Microsoft.Authorization/roleAssignments/f0a5b065-1f5b-09c9-1b97-6fde9cd373be' or the scope is invalid. If access was recently granted, please refresh your credentials."
-│
-│   with azurerm_role_assignment.hendertech-registry[0],
-│   on main.tf line 267, in resource "azurerm_role_assignment" "hendertech-registry":
-│  267: resource "azurerm_role_assignment" "hendertech-registry" {
-```
-
-Run the following command, and then `terraform apply`:
-```
-az aks update \
-        --name my-aks-name \
-        --resource-group my-rg-name \
-        --attach-acr my-acr-name
-```
-For example as a one-liner:
-```
-az aks update --name aks --resource-group aks-resource-group --attach-acr hendertechRegistry
-```
-
-If the above doesn't work, consult this issue for more troubleshooting steps: 
-
-https://github.com/hashicorp/terraform-provider-azurerm/issues/11434
+1. To update a chart you can use Lens and run `helm list --namespace yournamespace` to find the chart and `helm uninstall --namespace yournamespace` and then run `terraform apply` to update the chart. It doesn't seem like terraform will reapply a chart once it's been installed.

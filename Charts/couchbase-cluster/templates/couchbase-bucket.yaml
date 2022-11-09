@@ -1,0 +1,11 @@
+apiVersion: couchbase.com/v2
+kind: CouchbaseBucket
+metadata:
+  name: default  
+spec:
+  compressionMode: passive
+  conflictResolution: seqno
+  evictionPolicy: valueOnly
+  ioPriority: low
+  memoryQuota: 256Mi
+  #replicas: 2
